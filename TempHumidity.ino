@@ -3,17 +3,22 @@
 #include <Process.h>
 #include "TembooAccount.h" // contains Temboo account information, as described below
 
+// Based on
 // BME280 MOD-1022 weather multi-sensor Arduino demo
 // Written originally by Embedded Adventures
+// See https://github.com/adafruit/Adafruit_BME280_Library for original
+// you will need to install that library
 
 #include <BME280_MOD-1022.h>
 
 #include <Wire.h>
 
 #define BUF_LEN 45
-Process date;                 // process used to get the date
 
-void printCompensatedMeasurements(void) {
+
+Process date; // process used to get the date
+
+void saveData(void) {
   char buffer[BUF_LEN];
   int i;
   for (i=0; i<BUF_LEN; i++) {
@@ -32,51 +37,49 @@ void printCompensatedMeasurements(void) {
     timeString = date.readString();
   }
   
-  double tempMostAccurate, humidityMostAccurate, pressureMostAccurate;
+  double temp, humidity;
 
-  tempMostAccurate     = BME280.getTemperatureMostAccurate() * 9.0 / 5.0 + 32.0;
-  humidityMostAccurate = BME280.getHumidityMostAccurate();
-  pressureMostAccurate = BME280.getPressureMostAccurate();
+  temp     = BME280.getTemperatureMostAccurate() * 9.0 / 5.0 + 32.0;
+  humidity = BME280.getHumidityMostAccurate();
 
   i = 0;
   timeString.toCharArray(buffer, BUF_LEN, 0);
   i += 19;
   buffer[i++]=',';
   buffer[i++] = ' ';
-  dtostrf(tempMostAccurate, 7, 2, buffer+i);
+  dtostrf(temp, 7, 2, buffer+i);
   i+=7;
   buffer[i++] = ',';
   buffer[i++] = ' ';
-  dtostrf(humidityMostAccurate, 7, 2, buffer+i);
+  dtostrf(humidity, 7, 2, buffer+i);
   
-      TembooChoreo AppendRowChoreo;
+  // Invoke the Temboo client
+  TembooChoreo AppendRowChoreo;
+  AppendRowChoreo.begin();
 
-    // Invoke the Temboo client
-    AppendRowChoreo.begin();
+  // Set Temboo account credentials
+  AppendRowChoreo.setAccountName(TEMBOO_ACCOUNT);
+  AppendRowChoreo.setAppKeyName(TEMBOO_APP_KEY_NAME);
+  AppendRowChoreo.setAppKey(TEMBOO_APP_KEY);
 
-    // Set Temboo account credentials
-    AppendRowChoreo.setAccountName(TEMBOO_ACCOUNT);
-    AppendRowChoreo.setAppKeyName(TEMBOO_APP_KEY_NAME);
-    AppendRowChoreo.setAppKey(TEMBOO_APP_KEY);
+  // Set profile to use for execution
+  AppendRowChoreo.setProfile("TempHumidity");
 
-    // Set profile to use for execution
-    AppendRowChoreo.setProfile("TempHumidity");
+  // Set Choreo inputs
+  AppendRowChoreo.addInput("SpreadsheetTitle", "Temp-Humidity");
+  AppendRowChoreo.addInput("RowData", buffer);
 
-    // Set Choreo inputs
-    AppendRowChoreo.addInput("SpreadsheetTitle", "Temp-Humidity");
-    AppendRowChoreo.addInput("RowData", buffer);
-
-    // Identify the Choreo to run
-    AppendRowChoreo.setChoreo("/Library/Google/Spreadsheets/AppendRow");
-    
-    // Run the Choreo; when results are available, print them to serial
-    AppendRowChoreo.run();
-    
-    while(AppendRowChoreo.available()) {
-      char c = AppendRowChoreo.read();
-      //Serial.print(c);
-    }
-    AppendRowChoreo.close();
+  // Identify the Choreo to run
+  AppendRowChoreo.setChoreo("/Library/Google/Spreadsheets/AppendRow");
+  
+  // Run the Choreo; when results are available, print them to serial
+  AppendRowChoreo.run();
+  
+  while(AppendRowChoreo.available()) {
+    char c = AppendRowChoreo.read();
+    //Serial.print(c);
+  }
+  AppendRowChoreo.close();
 
 }
 
@@ -121,9 +124,9 @@ void loop()
   
   // read out the data - must do this before calling the getxxxxx routines
   BME280.readMeasurements();
-  printCompensatedMeasurements();
+  saveData();
   
-  // wait 2 min
+  // wait 2 min -- don't use delay() for longer than 10s of ms
   const long interval = 1200000;
   unsigned long currentMillis = millis();
   unsigned long start = currentMillis;
